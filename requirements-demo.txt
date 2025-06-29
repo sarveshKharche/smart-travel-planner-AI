@@ -1,0 +1,2 @@
+# Minimal requirements for Lambda demo - only AWS SDK
+boto3>=1.35.0
