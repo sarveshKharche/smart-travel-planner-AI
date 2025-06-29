@@ -244,49 +244,49 @@ def display_itinerary(result: Dict[str, Any]):
     if result.get('timestamp'):
         st.markdown(f"**Generated:** {result['timestamp']}")
     
-    # Additional recommendations if available
-    recommendations = itinerary.get('recommendations', {})
-    if recommendations:
-        st.markdown("### 💡 Additional Recommendations")
+    # # Additional recommendations if available
+    # recommendations = itinerary.get('recommendations', {})
+    # if recommendations:
+    #     st.markdown("### 💡 Additional Recommendations")
         
-        col1, col2 = st.columns(2)
+    #     col1, col2 = st.columns(2)
         
-        with col1:
-            if 'accommodation' in recommendations:
-                st.markdown("**🏨 Accommodation**")
-                st.info(recommendations['accommodation'])
+    #     with col1:
+    #         if 'accommodation' in recommendations:
+    #             st.markdown("**🏨 Accommodation**")
+    #             st.info(recommendations['accommodation'])
             
-            if 'transportation' in recommendations:
-                st.markdown("**🚗 Transportation**")
-                st.info(recommendations['transportation'])
+    #         if 'transportation' in recommendations:
+    #             st.markdown("**🚗 Transportation**")
+    #             st.info(recommendations['transportation'])
         
-        with col2:
-            if 'dining' in recommendations:
-                st.markdown("**🍽️ Dining**")
-                dining = recommendations['dining']
-                if isinstance(dining, list):
-                    for restaurant in dining:
-                        st.write(f"• {restaurant}")
-                else:
-                    st.info(dining)
+    #     with col2:
+    #         if 'dining' in recommendations:
+    #             st.markdown("**🍽️ Dining**")
+    #             dining = recommendations['dining']
+    #             if isinstance(dining, list):
+    #                 for restaurant in dining:
+    #                     st.write(f"• {restaurant}")
+    #             else:
+    #                 st.info(dining)
     
-    # Export functionality
-    st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.download_button(
-            label="� Download Itinerary (JSON)",
-            data=json.dumps(itinerary, indent=2),
-            file_name=f"travel_itinerary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+    # # Export functionality
+    # st.markdown("---")
+    # col1, col2, col3 = st.columns([1, 2, 1])
+    # with col2:
+    #     st.download_button(
+    #         label="� Download Itinerary (JSON)",
+    #         data=json.dumps(itinerary, indent=2),
+    #         file_name=f"travel_itinerary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+    #         mime="application/json",
+    #         use_container_width=True
+    #     )
     
-    # Session info
-    if result.get('session_id'):
-        st.markdown(f"**Session ID:** `{result['session_id']}`")
-    if result.get('timestamp'):
-        st.markdown(f"**Generated:** {result['timestamp']}")
+    # # Session info
+    # if result.get('session_id'):
+    #     st.markdown(f"**Session ID:** `{result['session_id']}`")
+    # if result.get('timestamp'):
+    #     st.markdown(f"**Generated:** {result['timestamp']}")
 
 def main():
     """Main Streamlit application"""
