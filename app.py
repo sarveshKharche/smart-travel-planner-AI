@@ -108,36 +108,26 @@ def display_itinerary(result: Dict[str, Any]):
     # Extract destination and basic info
     destination = itinerary.get('destination', 'Your Destination')
     duration = itinerary.get('duration', 'Multi-day')
-    total_cost = itinerary.get('total_cost', 0)
+    budget_estimate = itinerary.get('budget_estimate', 'Budget varies')
+    highlights = itinerary.get('highlights', [])
     
     # Header with destination and duration
     st.markdown(f"""
     <div class="main-header">
         <h1>🗺️ {destination}</h1>
-        <p>{duration} days • Total Budget: ${total_cost:,}</p>
+        <p>{duration} • {budget_estimate}</p>
     </div>
     """, unsafe_allow_html=True)
     
     # Trip highlights section
-    st.markdown("### ✨ Trip Highlights")
-    
-    # Collect highlights from daily activities
-    highlights = []
-    day_keys = sorted([k for k in itinerary.keys() if k.startswith('day_')])
-    
-    for day_key in day_keys[:3]:  # Show highlights from first 3 days
-        day_data = itinerary.get(day_key, {})
-        activities = day_data.get('activities', [])
-        if activities:
-            highlights.append(activities[0])  # Take first activity from each day
-    
     if highlights:
-        cols = st.columns(len(highlights))
+        st.markdown("### ✨ Trip Highlights")
+        cols = st.columns(min(len(highlights), 3))
         for i, highlight in enumerate(highlights):
-            with cols[i]:
+            with cols[i % 3]:
                 st.markdown(f"""
                 <div class="highlight-box">
-                    <h4>🎯 Day {i+1} Highlight</h4>
+                    <h4>🎯 Highlight {i+1}</h4>
                     <p style="color: white; margin: 0;">{highlight}</p>
                 </div>
                 """, unsafe_allow_html=True)
@@ -145,29 +135,114 @@ def display_itinerary(result: Dict[str, Any]):
     # Daily itinerary section
     st.markdown("### 📅 Your Complete Itinerary")
     
-    for day_key in day_keys:
-        day_data = itinerary.get(day_key, {})
-        day_num = day_key.split('_')[1]
-        date = day_data.get('date', f'Day {day_num}')
-        estimated_cost = day_data.get('estimated_cost', 0)
-        activities = day_data.get('activities', [])
+    # Check for daily_schedule format first
+    daily_schedule = itinerary.get('daily_schedule', {})
+    if daily_schedule:
+        # Sort the days properly (day_1, day_2, etc.)
+        day_keys = sorted([k for k in daily_schedule.keys() if k.startswith('day_')])
         
-        # Day container
-        st.markdown(f"""
-        <div class="itinerary-day">
-            <h4>🗓️ Day {day_num} - {date}</h4>
-            <p style="color: #667eea; font-weight: bold;">💰 Budget: ${estimated_cost}</p>
-        </div>
-        """, unsafe_allow_html=True)
+        for day_key in day_keys:
+            activities = daily_schedule[day_key]
+            day_num = day_key.split('_')[1]
+            
+            # Day container
+            st.markdown(f"""
+            <div class="itinerary-day">
+                <h4>🗓️ Day {day_num}</h4>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            # Activities list
+            if isinstance(activities, list) and activities:
+                for i, activity in enumerate(activities, 1):
+                    st.markdown(f"**{i}.** {activity}")
+            else:
+                st.markdown("*No specific activities planned for this day*")
+            
+            st.markdown("---")
+    
+    # Fallback: Check for direct day_X keys in itinerary
+    else:
+        day_keys = sorted([k for k in itinerary.keys() if k.startswith('day_')])
         
-        # Activities list
-        if activities:
-            for i, activity in enumerate(activities, 1):
-                st.markdown(f"**{i}.** {activity}")
+        if day_keys:
+            for day_key in day_keys:
+                day_data = itinerary[day_key]
+                day_num = day_key.split('_')[1]
+                
+                # Day container
+                st.markdown(f"""
+                <div class="itinerary-day">
+                    <h4>🗓️ Day {day_num}</h4>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Handle different formats
+                if isinstance(day_data, list):
+                    # Activities are directly in a list
+                    for i, activity in enumerate(day_data, 1):
+                        st.markdown(f"**{i}.** {activity}")
+                elif isinstance(day_data, dict):
+                    # Activities might be in a sub-field
+                    activities = day_data.get('activities', [])
+                    date = day_data.get('date', '')
+                    cost = day_data.get('estimated_cost', 0)
+                    
+                    if date:
+                        st.markdown(f"**Date:** {date}")
+                    if cost:
+                        st.markdown(f"**Budget:** ${cost}")
+                    
+                    for i, activity in enumerate(activities, 1):
+                        st.markdown(f"**{i}.** {activity}")
+                
+                st.markdown("---")
         else:
-            st.markdown("*Activities will be planned based on your preferences*")
+            st.warning("⚠️ No daily itinerary found in the API response.")
+    
+    # Additional recommendations
+    recommendations = itinerary.get('recommendations', {})
+    if recommendations:
+        st.markdown("### 💡 Additional Recommendations")
         
-        st.markdown("---")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if 'accommodation' in recommendations:
+                st.markdown("**🏨 Accommodation**")
+                st.info(recommendations['accommodation'])
+            
+            if 'transportation' in recommendations:
+                st.markdown("**🚗 Transportation**")
+                st.info(recommendations['transportation'])
+        
+        with col2:
+            if 'dining' in recommendations:
+                st.markdown("**🍽️ Dining**")
+                dining = recommendations['dining']
+                if isinstance(dining, list):
+                    for restaurant in dining:
+                        st.write(f"• {restaurant}")
+                else:
+                    st.info(dining)
+    
+    # Export functionality
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.download_button(
+            label="📄 Download Itinerary (JSON)",
+            data=json.dumps(itinerary, indent=2),
+            file_name=f"travel_itinerary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+    
+    # Session info
+    if result.get('session_id'):
+        st.markdown(f"**Session ID:** `{result['session_id']}`")
+    if result.get('timestamp'):
+        st.markdown(f"**Generated:** {result['timestamp']}")
     
     # Additional recommendations if available
     recommendations = itinerary.get('recommendations', {})
