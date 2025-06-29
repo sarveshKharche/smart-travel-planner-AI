@@ -1,2 +1,4 @@
+# Streamlit Community Cloud Requirements
+# Minimal dependencies for public hosting
 streamlit>=1.28.0
 requests>=2.31.0

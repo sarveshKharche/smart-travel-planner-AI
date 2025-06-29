@@ -1,20 +1,19 @@
 """
-Enhanced Streamlit Frontend for Smart Travel Planner AI
+Smart Travel Planner AI - Streamlit Community Cloud Version
 
-A clean, focused interface that works with both local backend and deployed AWS API.
+Public-facing interface that connects to the deployed AWS API.
+Optimized for Streamlit Community Cloud hosting.
 """
 
 import streamlit as st
-import asyncio
 import json
 import requests
 from datetime import datetime
 from typing import Dict, Any, Optional
-import sys
-import os
+import time
 
-# Add the src directory to the path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'src'))
+# Configuration
+AWS_API_URL = "https://oydiuxox5d.execute-api.us-east-1.amazonaws.com/dev/plan"
 
 # Set page config
 st.set_page_config(
@@ -68,56 +67,28 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-class APIClient:
-    """Client for communicating with both local and cloud backends"""
-    
-    def __init__(self, use_cloud: bool = False):
-        self.use_cloud = use_cloud
-        self.cloud_endpoint = "https://oydiuxox5d.execute-api.us-east-1.amazonaws.com/dev/plan"
-        self.local_app = None
+def call_travel_api(query: str) -> Dict[str, Any]:
+    """Call the AWS API Gateway endpoint for travel planning"""
+    try:
+        response = requests.post(
+            AWS_API_URL,
+            json={"query": query},
+            timeout=45,
+            headers={"Content-Type": "application/json"}
+        )
         
-        if not use_cloud:
-            try:
-                from src.core.application import TravelPlannerApp
-                self.local_app = TravelPlannerApp()
-                st.success("✅ Local backend initialized successfully!")
-            except ImportError as e:
-                st.error(f"Failed to import local backend: {e}")
-                st.info("Switching to cloud backend...")
-                self.use_cloud = True
-    
-    async def process_travel_request(self, query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Process travel request using either local or cloud backend"""
-        
-        if self.use_cloud:
-            return await self._call_cloud_api(query, session_id)
+        if response.status_code == 200:
+            return response.json()
         else:
-            if self.local_app is None:
-                raise Exception("Local backend not available")
-            return await self.local_app.process_travel_request(query, session_id)
-    
-    async def _call_cloud_api(self, query: str, session_id: Optional[str] = None) -> Dict[str, Any]:
-        """Call the deployed AWS API"""
-        try:
-            payload = {"query": query}
-            if session_id:
-                payload["session_id"] = session_id
+            st.error(f"🚨 API Error: {response.status_code}")
+            return {"success": False, "error": f"API returned status {response.status_code}"}
             
-            response = requests.post(
-                self.cloud_endpoint,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                return response.json()
-            else:
-                raise Exception(f"API call failed with status {response.status_code}: {response.text}")
-                
-        except Exception as e:
-            st.error(f"Cloud API error: {e}")
-            raise
+    except requests.exceptions.Timeout:
+        st.error("⏰ Request timed out. The AI is working hard on your itinerary! Please try again.")
+        return {"success": False, "error": "timeout"}
+    except requests.exceptions.RequestException as e:
+        st.error(f"🌐 Connection error: {str(e)}")
+        return {"success": False, "error": str(e)}
 
 def initialize_session_state():
     """Initialize Streamlit session state"""
@@ -125,8 +96,6 @@ def initialize_session_state():
         st.session_state.current_result = None
     if 'current_session_id' not in st.session_state:
         st.session_state.current_session_id = None
-    if 'api_client' not in st.session_state:
-        st.session_state.api_client = None
 
 def display_itinerary(result: Dict[str, Any]):
     """Display the generated itinerary in a beautiful format"""
@@ -136,59 +105,85 @@ def display_itinerary(result: Dict[str, Any]):
     
     itinerary = result.get('itinerary', {})
     
+    # Extract destination and basic info
+    destination = itinerary.get('destination', 'Your Destination')
+    duration = itinerary.get('duration', 'Multi-day')
+    total_cost = itinerary.get('total_cost', 0)
+    
     # Header with destination and duration
     st.markdown(f"""
     <div class="main-header">
-        <h1>🗺️ {itinerary.get('destination', 'Your Destination')}</h1>
-        <p>{itinerary.get('duration', 'Multi-day')} Trip • {itinerary.get('budget_estimate', 'Budget varies')}</p>
+        <h1>🗺️ {destination}</h1>
+        <p>{duration} days • Total Budget: ${total_cost:,}</p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Highlights section
-    highlights = itinerary.get('highlights', [])
+    # Trip highlights section
+    st.markdown("### ✨ Trip Highlights")
+    
+    # Collect highlights from daily activities
+    highlights = []
+    day_keys = sorted([k for k in itinerary.keys() if k.startswith('day_')])
+    
+    for day_key in day_keys[:3]:  # Show highlights from first 3 days
+        day_data = itinerary.get(day_key, {})
+        activities = day_data.get('activities', [])
+        if activities:
+            highlights.append(activities[0])  # Take first activity from each day
+    
     if highlights:
-        st.markdown("### ✨ Trip Highlights")
-        cols = st.columns(min(len(highlights), 3))
+        cols = st.columns(len(highlights))
         for i, highlight in enumerate(highlights):
-            with cols[i % 3]:
+            with cols[i]:
                 st.markdown(f"""
                 <div class="highlight-box">
-                    <strong>{highlight}</strong>
+                    <h4>🎯 Day {i+1} Highlight</h4>
+                    <p style="color: white; margin: 0;">{highlight}</p>
                 </div>
                 """, unsafe_allow_html=True)
     
-    # Daily schedule
-    daily_schedule = itinerary.get('daily_schedule', {})
-    if daily_schedule:
-        st.markdown("### 📅 Daily Itinerary")
+    # Daily itinerary section
+    st.markdown("### 📅 Your Complete Itinerary")
+    
+    for day_key in day_keys:
+        day_data = itinerary.get(day_key, {})
+        day_num = day_key.split('_')[1]
+        date = day_data.get('date', f'Day {day_num}')
+        estimated_cost = day_data.get('estimated_cost', 0)
+        activities = day_data.get('activities', [])
         
-        for day, activities in daily_schedule.items():
-            if isinstance(activities, list):
-                st.markdown(f"""
-                <div class="itinerary-day">
-                    <h4>🗓️ {day.replace('_', ' ').title()}</h4>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                for i, activity in enumerate(activities, 1):
-                    st.markdown(f"**{i}.** {activity}")
-                st.markdown("---")
+        # Day container
+        st.markdown(f"""
+        <div class="itinerary-day">
+            <h4>🗓️ Day {day_num} - {date}</h4>
+            <p style="color: #667eea; font-weight: bold;">💰 Budget: ${estimated_cost}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # Activities list
+        if activities:
+            for i, activity in enumerate(activities, 1):
+                st.markdown(f"**{i}.** {activity}")
+        else:
+            st.markdown("*Activities will be planned based on your preferences*")
+        
+        st.markdown("---")
     
-    # Recommendations
+    # Additional recommendations if available
     recommendations = itinerary.get('recommendations', {})
     if recommendations:
-        st.markdown("### 💡 Recommendations")
+        st.markdown("### 💡 Additional Recommendations")
         
         col1, col2 = st.columns(2)
         
         with col1:
             if 'accommodation' in recommendations:
                 st.markdown("**🏨 Accommodation**")
-                st.write(recommendations['accommodation'])
+                st.info(recommendations['accommodation'])
             
             if 'transportation' in recommendations:
                 st.markdown("**🚗 Transportation**")
-                st.write(recommendations['transportation'])
+                st.info(recommendations['transportation'])
         
         with col2:
             if 'dining' in recommendations:
@@ -198,14 +193,19 @@ def display_itinerary(result: Dict[str, Any]):
                     for restaurant in dining:
                         st.write(f"• {restaurant}")
                 else:
-                    st.write(dining)
+                    st.info(dining)
     
-    # Execution trace (if available)
-    execution_trace = result.get('execution_trace', [])
-    if execution_trace:
-        with st.expander("🔍 AI Execution Trace"):
-            for step in execution_trace:
-                st.markdown(f'<div class="agent-trace">✓ {step}</div>', unsafe_allow_html=True)
+    # Export functionality
+    st.markdown("---")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.download_button(
+            label="� Download Itinerary (JSON)",
+            data=json.dumps(itinerary, indent=2),
+            file_name=f"travel_itinerary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
     
     # Session info
     if result.get('session_id'):
@@ -222,26 +222,29 @@ def main():
     <div class="main-header">
         <h1>✈️ Smart Travel Planner AI</h1>
         <p>Create personalized travel itineraries with AI-powered recommendations</p>
+        <p><em>Powered by Amazon Bedrock AI & Multi-Agent Architecture</em></p>
     </div>
     """, unsafe_allow_html=True)
     
-    # Backend selection
-    st.sidebar.markdown("### ⚙️ Configuration")
-    use_cloud = st.sidebar.toggle(
-        "Use Cloud API", 
-        value=True,
-        help="Toggle between local backend and deployed AWS API"
-    )
+    # Sidebar info
+    st.sidebar.markdown("### 🌟 Features")
+    st.sidebar.markdown("""
+    - 🤖 **AI-Powered Planning** - Advanced multi-agent system
+    - 🌍 **Global Destinations** - Plan trips anywhere in the world  
+    - 💰 **Budget-Aware** - Get recommendations that fit your budget
+    - ⚡ **Real-time Generation** - Instant itinerary creation
+    - 📱 **Mobile Friendly** - Works perfectly on all devices
+    """)
     
-    if use_cloud:
-        st.sidebar.success("🌐 Using AWS Cloud API")
-        st.sidebar.markdown("**Endpoint:** `https://oydiuxox5d.execute-api.us-east-1.amazonaws.com/dev/plan`")
-    else:
-        st.sidebar.info("💻 Using Local Backend")
+    st.sidebar.markdown("### ℹ️ About")
+    st.sidebar.markdown("""
+    This app uses advanced AI to create personalized travel itineraries.
     
-    # Initialize API client
-    if st.session_state.api_client is None or st.session_state.api_client.use_cloud != use_cloud:
-        st.session_state.api_client = APIClient(use_cloud=use_cloud)
+    **Powered by:**
+    - Amazon Bedrock AI
+    - Multi-Agent Architecture  
+    - AWS Cloud Infrastructure
+    """)
     
     # Main interface
     st.markdown("### 🎯 Plan Your Trip")
@@ -251,54 +254,66 @@ def main():
         user_query = st.text_area(
             "Describe your ideal trip:",
             placeholder="e.g., Plan a 5-day romantic trip to Italy with interests in art, food, and wine. Budget is around $3000.",
-            height=100
+            height=120,
+            help="💡 Be specific about destination, duration, number of travelers, budget, and preferences for best results!"
         )
         
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            submitted = st.form_submit_button("🚀 Generate Itinerary", use_container_width=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
         with col2:
-            clear_btn = st.form_submit_button("🗑️ Clear", use_container_width=True)
-    
-    # Handle clear button
-    if clear_btn:
-        st.session_state.current_result = None
-        st.session_state.current_session_id = None
-        st.rerun()
+            submitted = st.form_submit_button("🚀 Generate Itinerary", use_container_width=True)
     
     # Handle form submission
     if submitted and user_query.strip():
-        with st.spinner("🤖 AI is crafting your perfect itinerary..."):
-            try:
-                # Process the travel request
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(
-                    st.session_state.api_client.process_travel_request(
-                        user_query, 
-                        st.session_state.current_session_id
-                    )
-                )
-                loop.close()
-                
-                if result and result.get('success'):
-                    st.session_state.current_result = result
-                    if result.get('session_id'):
-                        st.session_state.current_session_id = result['session_id']
-                    
-                    st.markdown("""
-                    <div class="success-message">
-                        <strong>✅ Your itinerary is ready!</strong> The AI has crafted a personalized travel plan just for you.
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                else:
-                    st.error("Failed to create itinerary. Please try again with a different query.")
-                    
-            except Exception as e:
-                st.error(f"Error generating itinerary: {str(e)}")
-                if "timeout" in str(e).lower():
-                    st.info("The request is taking longer than expected. The AI might still be working on your itinerary.")
+        st.markdown("---")
+        
+        # Progress indicators
+        progress_container = st.container()
+        with progress_container:
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # Animated progress steps
+            steps = [
+                ("🔍 Understanding your travel preferences...", 20),
+                ("� AI agents collaborating on your itinerary...", 40), 
+                ("✈️ Gathering destination insights and recommendations...", 60),
+                ("🎨 Crafting your personalized travel plan...", 80),
+                ("✅ Finalizing your perfect itinerary...", 95)
+            ]
+            
+            for step_text, progress_val in steps:
+                status_text.markdown(f"**{step_text}**")
+                progress_bar.progress(progress_val)
+                time.sleep(0.8)
+            
+            # Make the API call
+            result = call_travel_api(user_query)
+            
+            progress_bar.progress(100)
+            status_text.markdown("**🎉 Your personalized itinerary is ready!**")
+            time.sleep(1)
+            
+            # Clear progress indicators
+            progress_container.empty()
+        
+        if result and result.get('success'):
+            st.session_state.current_result = result
+            if result.get('session_id'):
+                st.session_state.current_session_id = result['session_id']
+            
+            st.markdown("""
+            <div class="success-message">
+                <strong>✅ Your itinerary is ready!</strong> The AI has crafted a personalized travel plan just for you.
+            </div>
+            """, unsafe_allow_html=True)
+            
+        elif result and result.get('clarification_needed'):
+            st.warning("🤔 I need more information to create your perfect itinerary. Please provide more details about your preferences, budget, or travel dates.")
+        
+        else:
+            st.error("😅 Oops! There was an issue generating your itinerary. Please try again or rephrase your request.")
+            if result.get('error'):
+                st.info(f"Error details: {result['error']}")
     
     # Display current result
     if st.session_state.current_result:
@@ -309,16 +324,34 @@ def main():
     st.sidebar.markdown("### 💡 Example Queries")
     st.sidebar.markdown("""
     **Quick Examples:**
-    - "3-day cultural trip to Paris, $1500 budget"
-    - "Week-long adventure in Costa Rica for nature lovers"
-    - "Romantic weekend in Santorini with luxury accommodations"
-    - "Family trip to Tokyo with kids, focus on technology and anime"
-    - "Solo backpacking through Southeast Asia, budget-friendly"
+    - "5-day romantic trip to Paris for 2 people, budget $2500"
+    - "Week-long adventure in Iceland with hiking and northern lights"
+    - "3-day business trip to Tokyo with efficient scheduling"  
+    - "Family vacation to Orlando for 4 days with kids aged 8 and 12"
+    - "Budget backpacking through Southeast Asia for 10 days, $800"
+    - "Luxury wellness retreat in Bali for 6 days, focus on relaxation"
     """)
     
     # Footer
     st.sidebar.markdown("---")
     st.sidebar.markdown("**Smart Travel Planner AI** • Powered by Amazon Bedrock & AWS")
+    
+    # Main footer
+    st.markdown("---")
+    st.markdown("""
+    <div style="text-align: center; color: #666; padding: 2rem;">
+        <h4 style="color: #667eea;">🚀 Built with Advanced AI Technology</h4>
+        <p><strong>Multi-Agent Architecture:</strong> Supervisor • Query Parser • Itinerary Generator • Quality Evaluator</p>
+        <p><strong>Powered by:</strong> Amazon Bedrock AI • AWS Lambda • DynamoDB • Terraform Infrastructure</p>
+        <p><strong>Open Source:</strong> 
+           <a href="https://github.com/sarveshKharche/smart-travel-planner-AI" target="_blank" style="color: #667eea;">
+               View on GitHub 🔗
+           </a>
+        </p>
+        <br>
+        <p><em>Made with ❤️ for travelers worldwide</em></p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main()
