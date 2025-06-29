@@ -301,15 +301,15 @@ def main():
     </div>
     """, unsafe_allow_html=True)
     
-    # Sidebar info
-    st.sidebar.markdown("### 🌟 Features")
-    st.sidebar.markdown("""
-    - 🤖 **AI-Powered Planning** - Advanced multi-agent system
-    - 🌍 **Global Destinations** - Plan trips anywhere in the world  
-    - 💰 **Budget-Aware** - Get recommendations that fit your budget
-    - ⚡ **Real-time Generation** - Instant itinerary creation
-    - 📱 **Mobile Friendly** - Works perfectly on all devices
-    """)
+    # # Sidebar info
+    # st.sidebar.markdown("### 🌟 Features")
+    # st.sidebar.markdown("""
+    # - 🤖 **AI-Powered Planning** - Advanced multi-agent system
+    # - 🌍 **Global Destinations** - Plan trips anywhere in the world  
+    # - 💰 **Budget-Aware** - Get recommendations that fit your budget
+    # - ⚡ **Real-time Generation** - Instant itinerary creation
+    # - 📱 **Mobile Friendly** - Works perfectly on all devices
+    # """)
     
     st.sidebar.markdown("### ℹ️ About")
     st.sidebar.markdown("""
