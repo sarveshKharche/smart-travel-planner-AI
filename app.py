@@ -227,16 +227,16 @@ def display_itinerary(result: Dict[str, Any]):
                     st.info(dining)
     
     # Export functionality
-    st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.download_button(
-            label="📄 Download Itinerary (JSON)",
-            data=json.dumps(itinerary, indent=2),
-            file_name=f"travel_itinerary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-            mime="application/json",
-            use_container_width=True
-        )
+    # st.markdown("---")
+    # col1, col2, col3 = st.columns([1, 2, 1])
+    # with col2:
+    #     st.download_button(
+    #         label="📄 Download Itinerary (JSON)",
+    #         data=json.dumps(itinerary, indent=2),
+    #         file_name=f"travel_itinerary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+    #         mime="application/json",
+    #         use_container_width=True
+    #     )
     
     # Session info
     if result.get('session_id'):
